@@ -2,29 +2,33 @@ import pygame
 from constants import *
 from math import *
 
-class Player(pygame.sprite.Sprite):
-	height = 75
-	width = 75
+def Player():
+	return pygame.sprite.GroupSingle(PlayerSprite())
 
-	minPos = 20
-	maxPos = 300
+class PlayerSprite(pygame.sprite.Sprite):
+	Height = 40
+	Width = 40
+
+	MinPos = 20
+	MaxPos = 300
+	FlipWindow = 40
 
 	# We want to cover the entire distance in one second when
 	# moving backwards. Forwards will take twice as long.
 	#
-	moveVel = (maxPos - minPos) / FPS
+	MoveVel = (MaxPos - MinPos) / FPS
 
-	driftVel = 1
+	DriftVel = 1
 
 	# Frames per normal (non-antigrav) jump
-	normalJumpTime = 30
-	normalSpinTime = 30
+	NormalJumpTime = 30
+	NormalSpinTime = 30
 
 	# Initial velocity in Pixels/frame
-	jumpVelZero = -0.5 * GRAVITY * normalJumpTime
+	JumpVelZero = -0.5 * GRAVITY * NormalJumpTime
 
 	def createPlayer(self):
-		image = pygame.Surface((Player.width,Player.height))
+		image = pygame.Surface((PlayerSprite.Width,PlayerSprite.Height))
 		rect = image.get_rect()
 
 		image.set_colorkey((0,0,0))
@@ -37,22 +41,18 @@ class Player(pygame.sprite.Sprite):
 		self.image, self.rect = self.createPlayer()
 
 		self.screenHeight = pygame.display.get_surface().get_rect().height
-		self.moveTo((Player.minPos, self.screenHeight - Player.height))
+		self.moveTo((PlayerSprite.MinPos, self.screenHeight - PlayerSprite.Height))
 		self.original = self.image.copy()
 
 		self.angle = 0
 		self.spinning = False
 
-		self.jumpframe = 0
-		self.jumpdist = 0
+		self.jumpFrame = 0
+		self.jumpDist = 0
 		self.jumping = False
 
 		self.antigrav = False
-		self.hasswitchedgrav = False
-
-	def blitTo(self, screen):
-		screen.blit(self.image, self.rect)
-		return self.rect
+		self.hasSwitchedGrav = False
 
 	def rotateTo(self, angle):
 		center = self.rect.center
@@ -64,18 +64,18 @@ class Player(pygame.sprite.Sprite):
 		self.rect.topleft = pos
 
 	def jump(self):
-		self.rotStep = -360.0 / Player.normalSpinTime
+		self.rotStep = -360.0 / PlayerSprite.NormalSpinTime
 
-		self.jumpframe = 0
-		self.maxJump = -0.125 * GRAVITY * Player.normalJumpTime * Player.normalJumpTime
+		self.jumpFrame = 0
+		self.maxJump = -0.125 * GRAVITY * PlayerSprite.NormalJumpTime * PlayerSprite.NormalJumpTime
 
 		if self.antigrav:
-			self.jumpdist = self.screenHeight - 0.5*Player.height
-			self.jumpVel = -Player.jumpVelZero
+			self.jumpDist = self.screenHeight - 0.5*PlayerSprite.Height
+			self.jumpVel = -PlayerSprite.JumpVelZero
 			self.rotStep = -self.rotStep
 		else:
-			self.jumpdist = 0
-			self.jumpVel = Player.jumpVelZero
+			self.jumpDist = 0
+			self.jumpVel = PlayerSprite.JumpVelZero
 
 		self.jumping = True
 
@@ -83,36 +83,36 @@ class Player(pygame.sprite.Sprite):
 		return not self.jumping
 
 	def canswitchgrav(self):
-		if self.hasswitchedgrav:
+		if self.hasSwitchedGrav:
 			return False
 
 		if self.antigrav:
-			zenith = self.screenHeight - 0.5*Player.height - self.maxJump
-			return zenith <= self.jumpdist <= (zenith + 20)
+			zenith = self.screenHeight - 0.5*PlayerSprite.Height - self.maxJump
+			return zenith <= self.jumpDist <= (zenith + PlayerSprite.FlipWindow)
 		else:
-			return (self.maxJump - 20) <= self.jumpdist <= self.maxJump
+			return (self.maxJump - PlayerSprite.FlipWindow) <= self.jumpDist <= self.maxJump
 
 	def update(self, direction=None):
 		if self.jumping:
 			if not self.antigrav:
-				self.jumpdist += 0.5*GRAVITY*(2*self.jumpframe+1) + self.jumpVelZero
+				self.jumpDist += 0.5*GRAVITY*(2*self.jumpFrame+1) + PlayerSprite.JumpVelZero
 			else:
-				self.jumpdist += -0.5*GRAVITY*(2*self.jumpframe+1) - self.jumpVelZero
+				self.jumpDist += -0.5*GRAVITY*(2*self.jumpFrame+1) - PlayerSprite.JumpVelZero
 
-			self.jumpframe += 1
+			self.jumpFrame += 1
 
-			if (not self.antigrav and self.jumpdist <= 0) or (self.antigrav and self.jumpdist >= self.screenHeight):
+			if (not self.antigrav and self.jumpDist <= 0) or (self.antigrav and self.jumpDist >= self.screenHeight):
 				angle = 0
 				self.jumping = False
-				self.hasswitchedgrav = False
+				self.hasSwitchedGrav = False
 
 				if self.antigrav:
 					y = 0
 				else:
-					y = self.screenHeight - Player.height
+					y = self.screenHeight - PlayerSprite.Height
 			else:
-				angle = self.rotStep * self.jumpframe
-				y = self.screenHeight - Player.height - self.jumpdist
+				angle = self.rotStep * self.jumpFrame
+				y = self.screenHeight - PlayerSprite.Height - self.jumpDist
 
 			self.rotateTo(angle)
 		else:
@@ -121,32 +121,31 @@ class Player(pygame.sprite.Sprite):
 		x = self.rect.left
 
 		if direction == "right":
-			x += (Player.moveVel*0.5)
-			if x > Player.maxPos:
-				x = Player.maxPos
+			x += (PlayerSprite.MoveVel*0.5)
 		elif direction == "left":
-			x -= Player.moveVel
-			if x < Player.minPos:
-				x = Player.minPos
+			x -= PlayerSprite.MoveVel
 		else:
-			x -= Player.driftVel
-			if x < Player.minPos:
-				x = Player.minPos
+			x -= PlayerSprite.DriftVel
+
+		if x < PlayerSprite.MinPos:
+			x = PlayerSprite.MinPos
+		elif x > PlayerSprite.MaxPos:
+			x = PlayerSprite.MaxPos
 
 		self.moveTo((x,y))
 
 	def switchgrav(self):
 		if self.antigrav:
-			distance = self.jumpdist
+			distance = self.jumpDist
 			v = self.jumpVel
-			totalrot = -360 - self.angle
+			totalRot = -360 - self.angle
 		else:
-			distance = self.screenHeight - Player.height - self.jumpdist
+			distance = self.screenHeight - PlayerSprite.Height - self.jumpDist
 			v = -self.jumpVel
-			totalrot = 360 - self.angle
+			totalRot = 360 - self.angle
 
 		frames = floor((-v + sqrt(v*v - 2*GRAVITY*distance))/GRAVITY)
-		self.rotStep = -totalrot / frames
+		self.rotStep = -totalRot / frames
 
 		self.antigrav = not self.antigrav
-		self.hasswitchedgrav = False
+		self.hasSwitchedGrav = False
