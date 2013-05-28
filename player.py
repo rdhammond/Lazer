@@ -1,81 +1,89 @@
 import pygame
+import math
 from constants import *
-from math import *
 
-def Player():
-	return pygame.sprite.GroupSingle(PlayerSprite())
+class Player(pygame.sprite.GroupSingle):
+	def __init__(self, tunnel):
+		pygame.sprite.GroupSingle.__init__(self, PlayerSprite(tunnel))
+
+	def draw(self, surface):
+		if not self.sprite.dead:
+			pygame.sprite.GroupSingle.draw(self, surface)
 
 class PlayerSprite(pygame.sprite.Sprite):
 	Height = 40
 	Width = 40
 
-	MinPos = 20
-	MaxPos = 300
-	FlipWindow = 40
+	MinPosX = 20
+	MaxPosX = 300
+	NoFlipWindow = 40
+
+	# Death should take a second. 
+	DeathFrames = FPS * 1
 
 	# We want to cover the entire distance in one second when
 	# moving backwards. Forwards will take twice as long.
 	#
-	MoveVel = (MaxPos - MinPos) / FPS
-
+	MoveVel = (MaxPosX-MinPosX) / FPS
 	DriftVel = 1
 
-	# Frames per normal (non-antigrav) jump
-	NormalJumpTime = 30
-	NormalSpinTime = 30
+	# "Normal" jump, i.e. no antigrav on flat surface, should take
+	# half a second.
+	#
+	NormalJumpTime = FPS / 2
+	JumpVelBar = abs(0.5 * GRAVITY * NormalJumpTime)
 
-	# Initial velocity in Pixels/frame
-	JumpVelZero = -0.5 * GRAVITY * NormalJumpTime
+	def collideTest(player, obstacle):
+		return player.originalRect.colliderect(obstacle.rect)
 
-	def createPlayer(self):
+	def createPlayer(self, color):
 		image = pygame.Surface((PlayerSprite.Width,PlayerSprite.Height))
 		rect = image.get_rect()
 
 		image.set_colorkey((0,0,0))
-		pygame.draw.rect(image, (0,255,0), image.get_rect(), 1)
+		pygame.draw.rect(image, color, image.get_rect(), 1)
 
 		return image, rect
 
-	def __init__(self):
+	def __init__(self, tunnel):
 		pygame.sprite.Sprite.__init__(self)
-		self.image, self.rect = self.createPlayer()
 
 		self.screenHeight = pygame.display.get_surface().get_rect().height
-		self.moveTo((PlayerSprite.MinPos, self.screenHeight - PlayerSprite.Height))
-		self.original = self.image.copy()
-
-		self.angle = 0
-		self.spinning = False
-
-		self.jumpFrame = 0
-		self.jumpDist = 0
-		self.jumping = False
-
-		self.antigrav = False
-		self.hasSwitchedGrav = False
+		self.reset(tunnel)
 
 	def rotateTo(self, angle):
 		center = self.rect.center
+
 		self.image = pygame.transform.rotate(self.original, angle)
 		self.rect = self.image.get_rect(center=center)
 		self.angle = angle
 
 	def moveTo(self, pos):
-		self.rect.topleft = pos
+		self.rect.topleft = (pos[0], self.screenHeight - pos[1])
+		self.originalRect.topleft = self.rect.topleft
+
+	def getAngle(self):
+		return self.angle
+
+	def getPos(self):
+		return self.rect.left, self.screenHeight - self.rect.top
 
 	def jump(self):
-		self.rotStep = -360.0 / PlayerSprite.NormalSpinTime
+		left, top = self.getPos()
 
 		self.jumpFrame = 0
-		self.maxJump = -0.125 * GRAVITY * PlayerSprite.NormalJumpTime * PlayerSprite.NormalJumpTime
+		self.jumpStart = top
 
-		if self.antigrav:
-			self.jumpDist = self.screenHeight - 0.5*PlayerSprite.Height
-			self.jumpVel = -PlayerSprite.JumpVelZero
-			self.rotStep = -self.rotStep
+		if not self.antigrav:
+			self.jumpVelZero = PlayerSprite.JumpVelBar
 		else:
-			self.jumpDist = 0
-			self.jumpVel = PlayerSprite.JumpVelZero
+			self.jumpVelZero = -PlayerSprite.JumpVelBar
+
+		g = self.gravity
+		v0 = self.jumpVelZero
+		midFrame = -v0 / g
+		self.maxJump = 0.5*g*midFrame**2 + v0*midFrame + self.jumpStart
+		self.rotVel = (-360 if not self.antigrav else 360) / midFrame*2
 
 		self.jumping = True
 
@@ -86,66 +94,120 @@ class PlayerSprite(pygame.sprite.Sprite):
 		if self.hasSwitchedGrav:
 			return False
 
-		if self.antigrav:
-			zenith = self.screenHeight - 0.5*PlayerSprite.Height - self.maxJump
-			return zenith <= self.jumpDist <= (zenith + PlayerSprite.FlipWindow)
+		left, top = self.getPos()
+
+		if not self.antigrav:
+			#return (self.maxJump - PlayerSprite.FlipWindow) <= top <= self.maxJump
+			return top > PlayerSprite.NoFlipWindow
 		else:
-			return (self.maxJump - PlayerSprite.FlipWindow) <= self.jumpDist <= self.maxJump
+			#return self.maxJump <= top <= (self.maxJump + PlayerSprite.FlipWindow)
+			return top < (self.screenHeight - PlayerSprite.NoFlipWindow)
 
-	def update(self, direction=None):
-		if self.jumping:
-			if not self.antigrav:
-				self.jumpDist += 0.5*GRAVITY*(2*self.jumpFrame+1) + PlayerSprite.JumpVelZero
-			else:
-				self.jumpDist += -0.5*GRAVITY*(2*self.jumpFrame+1) - PlayerSprite.JumpVelZero
+	def calcY(self):
+		g = self.gravity
+		v0 = self.jumpVelZero
+		t = self.jumpFrame
+		y0 = self.jumpStart
 
-			self.jumpFrame += 1
+		return 0.5*g*t**2 + v0*t + y0
 
-			if (not self.antigrav and self.jumpDist <= 0) or (self.antigrav and self.jumpDist >= self.screenHeight):
-				angle = 0
-				self.jumping = False
-				self.hasSwitchedGrav = False
+	def jumpVel(self):
+		g = self.gravity
+		t = self.jumpFrame
+		v0 = self.jumpVelZero
 
-				if self.antigrav:
-					y = 0
-				else:
-					y = self.screenHeight - PlayerSprite.Height
-			else:
-				angle = self.rotStep * self.jumpFrame
-				y = self.screenHeight - PlayerSprite.Height - self.jumpDist
+		return g*t + v0
 
+	# TODO: Organize this nicer
+	def update(self, tunnel, direction=None):
+		if self.dead:
+			return
+
+		left, top = self.getPos()
+
+		if self.dying:
+			angle = self.angle + self.rotVel
 			self.rotateTo(angle)
-		else:
-			y = self.rect.top
+			self.dieFrame += 1
 
-		x = self.rect.left
+			if self.dieFrame >= PlayerSprite.DeathFrames:
+				self.dead = True
+			
+			return
 
 		if direction == "right":
-			x += (PlayerSprite.MoveVel*0.5)
+			left += PlayerSprite.MoveVel * 0.5
 		elif direction == "left":
-			x -= PlayerSprite.MoveVel
+			left -= PlayerSprite.MoveVel
 		else:
-			x -= PlayerSprite.DriftVel
+			left -= PlayerSprite.DriftVel
 
-		if x < PlayerSprite.MinPos:
-			x = PlayerSprite.MinPos
-		elif x > PlayerSprite.MaxPos:
-			x = PlayerSprite.MaxPos
+		if left < PlayerSprite.MinPosX:
+			left = PlayerSprite.MinPosX
+		elif left > PlayerSprite.MaxPosX:
+			left = PlayerSprite.MaxPosX
 
-		self.moveTo((x,y))
+		if self.jumping:
+			self.jumpFrame += 1
+			top = self.calcY()
+
+			floor, ceiling = tunnel.getBounds(int(left))
+				
+			if (not self.antigrav and top <= floor+PlayerSprite.Height) or (self.antigrav and top >= ceiling):
+				floorAngle, ceilingAngle = tunnel.getAngle(int(left))
+
+				if not self.antigrav:
+					top = floor+PlayerSprite.Height
+					angle = floorAngle
+				else:
+					top = ceiling
+					angle = ceilingAngle
+
+				self.jumping = False
+				self.hasSwitchedGrav = False
+			else:
+				angle = self.angle + self.rotVel
+
+			self.rotateTo(angle)
+
+		self.moveTo((left, top))
 
 	def switchgrav(self):
-		if self.antigrav:
-			distance = self.jumpDist
-			v = self.jumpVel
-			totalRot = -360 - self.angle
-		else:
-			distance = self.screenHeight - PlayerSprite.Height - self.jumpDist
-			v = -self.jumpVel
-			totalRot = 360 - self.angle
+		left, top = self.getPos()
 
-		frames = floor((-v + sqrt(v*v - 2*GRAVITY*distance))/GRAVITY)
-		self.rotStep = -totalRot / frames
+		self.jumpVelZero = self.jumpVel()
+		self.gravity = -self.gravity
+
+		if not self.antigrav:
+			self.jumpStart += PlayerSprite.Height
 
 		self.antigrav = not self.antigrav
+		self.hasSwitchedGrav = False
+
+	def die(self):
+		self.rotVel = -15
+		self.dieFrame = 0
+		self.dying = True
+
+	def reset(self, tunnel):
+		self.dieFrame = 0
+		self.dying = False
+		self.dead = False
+
+		self.original, self.originalRect = self.createPlayer((0,255,0))
+		self.rect = self.originalRect.copy()
+
+		floorAngle = tunnel.getAngle(PlayerSprite.MinPosX)[0]
+		self.rotateTo(floorAngle)
+
+		floor = tunnel.getBounds(PlayerSprite.MinPosX)[0]
+		self.antigrav = False
+		self.moveTo((PlayerSprite.MinPosX, floor+PlayerSprite.Height))
+
+		self.jumpFrame = 0
+		self.gravity = GRAVITY
+		self.jumpVelZero = 0
+		self.rotVel = 0
+		self.jumping = False
+
 		self.hasSwitchedGrav = False

@@ -1,20 +1,25 @@
 import sys, pygame
 from pygame.locals import *
 from constants import *
+from tunnel import *
 from player import *
 from lazer import *
 from shot import *
 
+DeathDelay = 1000
+
 pygame.init()
-screen = pygame.display.set_mode((600, 600), HWSURFACE | DOUBLEBUF)
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), HWSURFACE | DOUBLEBUF)
 clock = pygame.time.Clock()
 
-player = Player()
+tunnel = Tunnel()
+player = Player(tunnel)
 lazer = Lazer()
 shots = Shots()
 
 rightdown = False
 leftdown = False
+paused = False
 
 while True:
 	for event in pygame.event.get():
@@ -34,8 +39,8 @@ while True:
 			elif event.key == K_LEFT:
 				leftdown = True
 
-			elif event.unicode == "s":
-				lazer.fire()
+			elif event.unicode == "p":
+				paused = not paused
 
 			elif event.unicode == "q":
 				sys.exit()
@@ -46,19 +51,42 @@ while True:
 			elif event.key == K_LEFT:
 				leftdown = False
 
-	if rightdown:
-		player.update("right")
-	elif leftdown:
-		player.update("left")
-	else:
-		player.update()
+	if paused:
+		clock.tick(FPS)
+		continue
+
+	# TODO: Organize this nicer
+	if not player.sprite.dying:
+		collideShots = pygame.sprite.spritecollide(player.sprite, shots, False, PlayerSprite.collideTest)
 	
-	lazer.update(shots)
-	shots.update()
+		if len(collideShots) > 0:
+			player.sprite.die()
+
+	if not player.sprite.dying:
+		tunnel.update()
+	
+		if rightdown:
+			player.update(tunnel, "right")
+		elif leftdown:
+			player.update(tunnel, "left")
+		else:
+			player.update(tunnel)
+		
+		lazer.update(shots)
+		shots.update()
+
+	elif not player.sprite.dead:
+		player.update(tunnel)
 
 	screen.fill((0,0,0))
+	tunnel.draw(screen)
 	player.draw(screen)
 	lazer.draw(screen)
 	shots.draw(screen)
 	pygame.display.flip()
-	clock.tick(FPS)
+
+	if player.sprite.dead:
+		pygame.time.wait(DeathDelay)
+		player.sprite.reset(tunnel)
+	else:
+		clock.tick(FPS)
