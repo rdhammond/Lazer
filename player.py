@@ -36,17 +36,20 @@ class PlayerSprite(pygame.sprite.Sprite):
 	def collideTest(player, obstacle):
 		return player.originalRect.colliderect(obstacle.rect)
 
-	def createPlayer(self, color):
+	def createPlayer(self):
 		image = pygame.Surface((PlayerSprite.Width,PlayerSprite.Height))
 		rect = image.get_rect()
 
 		image.set_colorkey((0,0,0))
-		pygame.draw.rect(image, color, image.get_rect(), 1)
+		pygame.draw.rect(image, (0,255,0), image.get_rect(), 1)
 
 		return image, rect
 
 	def __init__(self, tunnel):
 		pygame.sprite.Sprite.__init__(self)
+
+		self.original, self.rect = self.createPlayer()
+		self.rotateTo(0)
 
 		self.screenHeight = pygame.display.get_surface().get_rect().height
 		self.reset(tunnel)
@@ -124,6 +127,11 @@ class PlayerSprite(pygame.sprite.Sprite):
 			return
 
 		left, top = self.getPos()
+		floor, ceiling = tunnel.getBounds(int(left))
+
+		if floor<0 or ceiling>self.screenHeight:
+			# PICK UP HERE: Actually fall into the pit
+			print "PIT"
 
 		if self.dying:
 			angle = self.angle + self.rotVel
@@ -151,17 +159,13 @@ class PlayerSprite(pygame.sprite.Sprite):
 			self.jumpFrame += 1
 			top = self.calcY()
 
-			floor, ceiling = tunnel.getBounds(int(left))
-				
 			if (not self.antigrav and top <= floor+PlayerSprite.Height) or (self.antigrav and top >= ceiling):
-				floorAngle, ceilingAngle = tunnel.getAngle(int(left))
-
 				if not self.antigrav:
 					top = floor+PlayerSprite.Height
-					angle = floorAngle
+					angle = 0
 				else:
 					top = ceiling
-					angle = ceilingAngle
+					angle = 0
 
 				self.jumping = False
 				self.hasSwitchedGrav = False
@@ -194,13 +198,11 @@ class PlayerSprite(pygame.sprite.Sprite):
 		self.dying = False
 		self.dead = False
 
-		self.original, self.originalRect = self.createPlayer((0,255,0))
+		self.image, self.originalRect = self.createPlayer()
 		self.rect = self.originalRect.copy()
 
-		floorAngle = tunnel.getAngle(PlayerSprite.MinPosX)[0]
-		self.rotateTo(floorAngle)
-
 		floor = tunnel.getBounds(PlayerSprite.MinPosX)[0]
+		print floor
 		self.antigrav = False
 		self.moveTo((PlayerSprite.MinPosX, floor+PlayerSprite.Height))
 

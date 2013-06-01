@@ -5,6 +5,7 @@ from tunnel import *
 from player import *
 from lazer import *
 from shot import *
+from crag import *
 
 DeathDelay = 1000
 
@@ -16,6 +17,7 @@ tunnel = Tunnel()
 player = Player(tunnel)
 lazer = Lazer()
 shots = Shots()
+crags = Crags()
 
 rightdown = False
 leftdown = False
@@ -39,6 +41,16 @@ while True:
 			elif event.key == K_LEFT:
 				leftdown = True
 
+			# DEBUG: Test ceiling crag
+			elif event.unicode == "c":
+				ceiling = tunnel.getBounds(SCREEN_WIDTH - 1)[1]
+				crags.add(CragSprite(ceiling, False))
+
+			# DEBUG: Test floor crag
+			elif event.unicode == "f":
+				floor = tunnel.getBounds(SCREEN_WIDTH - 1)[0]
+				crags.add(CragSprite(floor, True))
+
 			elif event.unicode == "p":
 				paused = not paused
 
@@ -58,8 +70,9 @@ while True:
 	# TODO: Organize this nicer
 	if not player.sprite.dying:
 		collideShots = pygame.sprite.spritecollide(player.sprite, shots, False, PlayerSprite.collideTest)
+		collideCrags = pygame.sprite.spritecollide(player.sprite, crags, False, PlayerSprite.collideTest)
 	
-		if len(collideShots) > 0:
+		if len(collideShots) > 0 or len(collideCrags) > 0:
 			player.sprite.die()
 
 	if not player.sprite.dying:
@@ -74,6 +87,7 @@ while True:
 		
 		lazer.update(shots)
 		shots.update()
+		crags.update()
 
 	elif not player.sprite.dead:
 		player.update(tunnel)
@@ -83,10 +97,12 @@ while True:
 	player.draw(screen)
 	lazer.draw(screen)
 	shots.draw(screen)
+	crags.draw(screen)
 	pygame.display.flip()
 
 	if player.sprite.dead:
 		pygame.time.wait(DeathDelay)
 		player.sprite.reset(tunnel)
+		crags.reset()
 	else:
 		clock.tick(FPS)
